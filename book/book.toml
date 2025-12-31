@@ -11,10 +11,11 @@ create-missing = true
 [output.html]
 default-theme = "rust"
 preferred-dark-theme = "ayu"
-git-repository-url = "https://github.com/your-repo/nuclear-football"
+git-repository-url = "https://github.com/spwplace/buckeye"
 additional-css = []
 additional-js = []
 no-section-label = false
+mathjax-support = true
 
 [output.html.fold]
 enable = true

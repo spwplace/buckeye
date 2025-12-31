@@ -47,7 +47,7 @@ This is an exponential distribution with mean λ = 1/Σ (the mean free path).
 
 ### Sampling from Exponential
 
-To sample from $p(d) = \Sigma e^{-\Sigma d}$, we use the **inverse transform method**:
+To sample from \\(p(d) = \Sigma e^{-\Sigma d}\\), we use the **inverse transform method**:
 
 1. Sample ξ uniformly from [0, 1]
 2. Set d = F⁻¹(ξ) where F is the CDF
@@ -143,7 +143,7 @@ In elastic scattering, the neutron bounces off the nucleus. We need to determine
 In the center-of-mass (CM) frame, elastic scattering off heavy nuclei is approximately isotropic:
 $$P(\mu_{cm}) = \frac{1}{2}, \quad \mu_{cm} \in [-1, 1]$$
 
-Sample: $\mu_{cm} = 2\xi - 1$
+Sample: \\(\mu_{cm} = 2\xi - 1\\)
 
 ### Energy Loss
 

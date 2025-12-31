@@ -9,10 +9,10 @@ Neutron behavior is governed by the **Boltzmann transport equation**, a 7-dimens
 $$\frac{1}{v}\frac{\partial\psi}{\partial t} + \mathbf{\Omega} \cdot \nabla\psi + \Sigma_t\psi = \int_{4\pi}\int_0^\infty \Sigma_s(\mathbf{r}, E' \rightarrow E, \mathbf{\Omega}' \rightarrow \mathbf{\Omega})\psi' dE' d\Omega' + Q$$
 
 where:
-- $\psi(\mathbf{r}, E, \mathbf{\Omega}, t)$ is the angular neutron flux
-- $\Sigma_t$ is the total macroscopic cross section  
-- $\Sigma_s$ is the differential scattering cross section
-- $Q$ is the external/fission source
+- \\(\psi(\mathbf{r}, E, \mathbf{\Omega}, t)\\) is the angular neutron flux
+- \\(\Sigma_t\\) is the total macroscopic cross section  
+- \\(\Sigma_s\\) is the differential scattering cross section
+- \\(Q\\) is the external/fission source
 
 The equation says: the rate of change of neutrons equals neutrons scattered in minus neutrons scattered out/absorbed plus sources.
 
@@ -62,15 +62,15 @@ Consider estimating an integral:
 $$I = \int_a^b f(x) dx$$
 
 Instead of numerical quadrature, we:
-1. Sample N random points $x_1, ..., x_N$ uniformly in [a, b]
-2. Estimate: $\hat{I} = \frac{b-a}{N}\sum_{i=1}^N f(x_i)$
+1. Sample N random points \\(x_1, ..., x_N\\) uniformly in [a, b]
+2. Estimate: \\(\hat{I} = \frac{b-a}{N}\sum_{i=1}^N f(x_i)\\)
 
-By the law of large numbers, $\hat{I} \rightarrow I$ as $N \rightarrow \infty$.
+By the law of large numbers, \\(\hat{I} \rightarrow I\\) as \\(N \rightarrow \infty\\).
 
 The standard error is:
 $$\sigma_{\hat{I}} = \frac{b-a}{\sqrt{N}}\sigma_f$$
 
-Key observation: the error decreases as $1/\sqrt{N}$, regardless of dimension. This is why Monte Carlo wins for high-dimensional problems.
+Key observation: the error decreases as \\(1/\sqrt{N}\\), regardless of dimension. This is why Monte Carlo wins for high-dimensional problems.
 
 ## Analog vs Non-Analog Monte Carlo
 

@@ -25,7 +25,7 @@ $${}^{240}\text{Pu}^* \rightarrow {}^{A_1}\text{X} + {}^{A_2}\text{Y} + \nu n + 
 
 where:
 - X and Y are fission fragments (typically unequal mass)
-- $\nu$ neutrons are released (typically 2-3)
+- \\(\nu\\) neutrons are released (typically 2-3)
 - Gamma rays carry away additional energy
 
 ### 4. Fragment Acceleration
@@ -79,10 +79,10 @@ The average number of neutrons per fission depends on the fissioning nucleus and
 $$\bar{\nu}(E) = \bar{\nu}_0 + \alpha E$$
 
 For Pu-239:
-- $\bar{\nu}_0 = 2.874$ (at thermal energies)
-- $\alpha = 0.148$ MeV⁻¹
+- \\(\bar{\nu}_0 = 2.874\\) (at thermal energies)
+- \\(\alpha = 0.148\\) MeV⁻¹
 
-At 1 MeV, $\bar{\nu} \approx 3.02$ neutrons per fission.
+At 1 MeV, \\(\bar{\nu} \approx 3.02\\) neutrons per fission.
 
 ### Energy Spectrum: χ(E)
 
@@ -91,8 +91,8 @@ Fission neutrons are born with a characteristic energy distribution called the *
 $$\chi(E) \propto e^{-E/a} \sinh\sqrt{bE}$$
 
 For Pu-239:
-- $a = 0.966$ MeV
-- $b = 2.842$ MeV⁻¹
+- \\(a = 0.966\\) MeV
+- \\(b = 2.842\\) MeV⁻¹
 
 This gives:
 - **Most probable energy**: ~0.7 MeV

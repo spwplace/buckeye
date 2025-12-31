@@ -99,7 +99,7 @@ This is **deeply supercritical**. The football would undergo a prompt critical e
 
 $$\rho = \frac{k-1}{k} = \frac{0.214}{1.214} = 17.6\%$$
 
-In "dollars" (where $1 = β = 0.0022$ for Pu):
+In "dollars" (where \\(1 = β = 0.0022\\) for Pu):
 $$\rho = \frac{0.176}{0.0022} = 80 \text{ dollars}$$
 
 The system is **80 dollars supercritical**—far into the prompt supercritical regime.

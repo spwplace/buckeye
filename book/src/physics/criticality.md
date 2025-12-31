@@ -73,10 +73,10 @@ For a given geometry and material, finding k_eff is an **eigenvalue problem**. T
 $$\hat{L}\phi = \frac{1}{k}\hat{F}\phi$$
 
 where:
-- $\hat{L}$ is the loss operator (absorption + leakage)
-- $\hat{F}$ is the fission production operator
-- $\phi$ is the neutron flux
-- $k$ is the eigenvalue we seek
+- \\(\hat{L}\\) is the loss operator (absorption + leakage)
+- \\(\hat{F}\\) is the fission production operator
+- \\(\phi\\) is the neutron flux
+- \\(k\\) is the eigenvalue we seek
 
 The physical interpretation: the fission source must be scaled by 1/k to maintain steady state.
 
@@ -85,10 +85,10 @@ The physical interpretation: the fission source must be scaled by 1/k to maintai
 The standard numerical method is **power iteration**:
 
 1. Guess an initial fission source distribution S₀(r)
-2. Solve for the flux: $\hat{L}\phi_n = S_n$
-3. Calculate the new source: $S_{n+1} = \hat{F}\phi_n$
-4. Estimate k: $k_n = \frac{\int S_{n+1}}{\int S_n}$
-5. Normalize: $S_{n+1} \leftarrow S_{n+1} / k_n$
+2. Solve for the flux: \\(\hat{L}\phi_n = S_n\\)
+3. Calculate the new source: \\(S_{n+1} = \hat{F}\phi_n\\)
+4. Estimate k: \\(k_n = \frac{\int S_{n+1}}{\int S_n}\\)
+5. Normalize: \\(S_{n+1} \leftarrow S_{n+1} / k_n\\)
 6. Repeat until converged
 
 Monte Carlo implements this by tracking neutrons generation by generation.

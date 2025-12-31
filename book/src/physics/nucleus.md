@@ -16,8 +16,8 @@ The nuclear radius follows an empirical formula:
 $$R = r_0 A^{1/3}$$
 
 where:
-- $r_0 \approx 1.2$ fm is a constant
-- $A$ is the mass number (protons + neutrons)
+- \\(r_0 \approx 1.2\\) fm is a constant
+- \\(A\\) is the mass number (protons + neutrons)
 
 This cube-root scaling tells us something profound: nuclear density is constant. Double the nucleons, double the volume. The nucleus is like an incompressible liquid droplet.
 
@@ -40,18 +40,18 @@ The saturation property is key. Unlike gravity or electromagnetism (which are lo
 
 ## Binding Energy
 
-The mass of a nucleus is less than the sum of its constituent protons and neutrons. This "missing mass" has been converted to binding energy via Einstein's $E = mc^2$.
+The mass of a nucleus is less than the sum of its constituent protons and neutrons. This "missing mass" has been converted to binding energy via Einstein's \\(E = mc^2\\).
 
-The **binding energy** of a nucleus with $Z$ protons and $N$ neutrons ($A = Z + N$) is:
+The **binding energy** of a nucleus with \\(Z\\) protons and \\(N\\) neutrons (\\(A = Z + N\\)) is:
 
 $$B(Z, N) = \left[ Z m_p + N m_n - M(Z, N) \right] c^2$$
 
 where:
-- $m_p = 938.272$ MeV/c² (proton mass)
-- $m_n = 939.565$ MeV/c² (neutron mass)
-- $M(Z, N)$ is the actual nuclear mass
+- \\(m_p = 938.272\\) MeV/c² (proton mass)
+- \\(m_n = 939.565\\) MeV/c² (neutron mass)
+- \\(M(Z, N)\\) is the actual nuclear mass
 
-The binding energy per nucleon, $B/A$, tells us how tightly bound the nucleus is. It varies across the periodic table:
+The binding energy per nucleon, \\(B/A\\), tells us how tightly bound the nucleus is. It varies across the periodic table:
 
 | Element | A | B/A (MeV) |
 |---------|---|-----------|
@@ -77,46 +77,46 @@ $$B(Z, N) = a_V A - a_S A^{2/3} - a_C \frac{Z(Z-1)}{A^{1/3}} - a_A \frac{(N-Z)^2
 
 Each term has a physical interpretation:
 
-### Volume Term: $a_V A$
-Binding is proportional to the number of nucleons (each contributes equally due to saturation). $a_V \approx 15.8$ MeV.
+### Volume Term: \\(a_V A\\)
+Binding is proportional to the number of nucleons (each contributes equally due to saturation). \\(a_V \approx 15.8\\) MeV.
 
-### Surface Term: $-a_S A^{2/3}$
-Nucleons at the surface have fewer neighbors and are less bound. Surface area scales as $A^{2/3}$. $a_S \approx 18.3$ MeV.
+### Surface Term: \\(-a_S A^{2/3}\\)
+Nucleons at the surface have fewer neighbors and are less bound. Surface area scales as \\(A^{2/3}\\). \\(a_S \approx 18.3\\) MeV.
 
-### Coulomb Term: $-a_C \frac{Z(Z-1)}{A^{1/3}}$
-Protons repel each other. The total Coulomb energy of a uniformly charged sphere scales as $Z^2/R \propto Z^2/A^{1/3}$. $a_C \approx 0.71$ MeV.
+### Coulomb Term: \\(-a_C \frac{Z(Z-1)}{A^{1/3}}\\)
+Protons repel each other. The total Coulomb energy of a uniformly charged sphere scales as \\(Z^2/R \propto Z^2/A^{1/3}\\). \\(a_C \approx 0.71\\) MeV.
 
-### Asymmetry Term: $-a_A \frac{(N-Z)^2}{A}$
-Nuclei prefer $N \approx Z$ due to the Pauli exclusion principle. Deviation costs energy. $a_A \approx 23.2$ MeV.
+### Asymmetry Term: \\(-a_A \frac{(N-Z)^2}{A}\\)
+Nuclei prefer \\(N \approx Z\\) due to the Pauli exclusion principle. Deviation costs energy. \\(a_A \approx 23.2\\) MeV.
 
-### Pairing Term: $\delta(A, Z)$
+### Pairing Term: \\(\delta(A, Z)\\)
 Nucleons prefer to pair up. Even-even nuclei are more stable:
 $$\delta = \begin{cases} +a_P A^{-1/2} & \text{even-even} \\ 0 & \text{odd-A} \\ -a_P A^{-1/2} & \text{odd-odd} \end{cases}$$
-with $a_P \approx 12$ MeV.
+with \\(a_P \approx 12\\) MeV.
 
 ## The Valley of Stability
 
-Plotting stable nuclei on an $N$ vs $Z$ chart reveals the **valley of stability**—a band where nuclei are stable against radioactive decay. Key features:
+Plotting stable nuclei on an \\(N\\) vs \\(Z\\) chart reveals the **valley of stability**—a band where nuclei are stable against radioactive decay. Key features:
 
-1. **Light nuclei**: $N \approx Z$ (the asymmetry term dominates)
-2. **Heavy nuclei**: $N > Z$ (extra neutrons dilute Coulomb repulsion)
-3. **Beyond lead**: No stable nuclei exist for $Z > 82$
+1. **Light nuclei**: \\(N \approx Z\\) (the asymmetry term dominates)
+2. **Heavy nuclei**: \\(N > Z\\) (extra neutrons dilute Coulomb repulsion)
+3. **Beyond lead**: No stable nuclei exist for \\(Z > 82\\)
 4. **Drip lines**: Limits where nuclei become unbound
 
-Plutonium-239 ($Z = 94$, $N = 145$) is well beyond the valley of stability. It's radioactive, decaying via alpha emission with a half-life of 24,100 years. But for our purposes, it's stable enough—and critically, it's fissile.
+Plutonium-239 (\\(Z = 94\\), \\(N = 145\\)) is well beyond the valley of stability. It's radioactive, decaying via alpha emission with a half-life of 24,100 years. But for our purposes, it's stable enough—and critically, it's fissile.
 
 ## Nuclear Instability
 
 Heavy nuclei are unstable for two reasons:
 
-1. **Coulomb repulsion** grows as $Z^2$ while the strong force only grows as $A$
+1. **Coulomb repulsion** grows as \\(Z^2\\) while the strong force only grows as \\(A\\)
 2. **Surface energy** of heavy nuclei makes them easier to deform
 
 The liquid drop model predicts a **fissility parameter**:
 
 $$x = \frac{E_\text{Coulomb}}{2 E_\text{Surface}} = \frac{Z^2/A}{50.88}$$
 
-When $x \geq 1$, the Coulomb repulsion exceeds the surface tension and the nucleus spontaneously fissions. For ²³⁹Pu:
+When \\(x \geq 1\\), the Coulomb repulsion exceeds the surface tension and the nucleus spontaneously fissions. For ²³⁹Pu:
 
 $$x = \frac{94^2/239}{50.88} = 0.73$$
 

@@ -47,7 +47,7 @@ Less common for our purposes:
 
 The probability of a reaction is quantified by its **cross section**, denoted σ. Think of it as the effective "target area" the nucleus presents to the neutron.
 
-If a nucleus had geometric area $\pi R^2$, and every neutron hitting it reacted, that would be the cross section. In reality, quantum mechanics makes cross sections very different from geometric areas—they can be much larger (resonances) or much smaller (threshold reactions).
+If a nucleus had geometric area \\(\pi R^2\\), and every neutron hitting it reacted, that would be the cross section. In reality, quantum mechanics makes cross sections very different from geometric areas—they can be much larger (resonances) or much smaller (threshold reactions).
 
 ### Units: The Barn
 

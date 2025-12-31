@@ -45,11 +45,11 @@ where Σ_tr is the **transport cross section**:
 
 $$\Sigma_{tr} = \Sigma_t - \bar{\mu}\Sigma_s$$
 
-The term $\bar{\mu} = \langle \cos\theta \rangle$ accounts for preferential forward scattering. For heavy nuclei:
+The term \\(\bar{\mu} = \langle \cos\theta \rangle\\) accounts for preferential forward scattering. For heavy nuclei:
 
 $$\bar{\mu} \approx \frac{2}{3A}$$
 
-For Pu-239 (A=239): $\bar{\mu} \approx 0.0028$, so Σ_tr ≈ Σ_t.
+For Pu-239 (A=239): \\(\bar{\mu} \approx 0.0028\\), so Σ_tr ≈ Σ_t.
 
 ## Material Buckling
 

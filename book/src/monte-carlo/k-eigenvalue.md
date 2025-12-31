@@ -9,10 +9,10 @@ The time-independent transport equation with fission is:
 $$\hat{L}\phi = \frac{1}{k}\hat{F}\phi$$
 
 where:
-- $\hat{L}$ is the net loss operator (streaming + absorption - scatter)
-- $\hat{F}$ is the fission production operator
-- $k$ is the eigenvalue (multiplication factor)
-- $\phi$ is the flux (eigenvector)
+- \\(\hat{L}\\) is the net loss operator (streaming + absorption - scatter)
+- \\(\hat{F}\\) is the fission production operator
+- \\(k\\) is the eigenvalue (multiplication factor)
+- \\(\phi\\) is the flux (eigenvector)
 
 In integral form:
 $$\phi(\mathbf{r}, E, \mathbf{\Omega}) = \int K(\mathbf{r}'\rightarrow\mathbf{r}, E'\rightarrow E, \mathbf{\Omega}'\rightarrow\mathbf{\Omega})\phi(\mathbf{r}', E', \mathbf{\Omega}')d\mathbf{r}'dE'd\mathbf{\Omega}' + \frac{1}{k}F$$
@@ -26,7 +26,7 @@ The standard solution method is **power iteration** (also called the source iter
 1. **Initialize**: Guess a fission source distribution S₀(r)
 2. **Transport**: Given source Sₙ, calculate flux φₙ
 3. **Fission production**: Calculate new source Sₙ₊₁ = Fφₙ
-4. **Estimate k**: $k_n = \frac{\int S_{n+1}}{\int S_n}$
+4. **Estimate k**: \\(k_n = \frac{\int S_{n+1}}{\int S_n}\\)
 5. **Normalize**: Sₙ₊₁ ← Sₙ₊₁/kₙ
 6. **Converge**: Repeat until kₙ and Sₙ converge
 

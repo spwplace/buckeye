@@ -1,1021 +1,987 @@
 """
-Manim Animations for Nuclear Physics Simulation
-3Blue1Brown-style visualizations of neutronics and criticality
+Nuclear Physics Animation Suite - Implosion to Detonation
+Uses actual simulation data from nuclear_physics.py and spatial_neutronics.py
 
-Run with: uv run manim -pql animations.py <SceneName>
-  -p: preview after render
-  -ql: low quality (fast), use -qm or -qh for higher quality
+Run: uv run manim -pql animations.py <SceneName>
+     -p: preview  -ql: low quality (fast)  -qh: high quality
 """
 
 from manim import *
 import numpy as np
-from scipy.integrate import solve_ivp
-from scipy.special import jv  # Bessel functions
 
-# Physics constants
-BARN_TO_M2 = 1e-28
-MEV_TO_J = 1.602176634e-13
-AMU_TO_KG = 1.66053906660e-27
-m_n = 1.674927471e-27  # neutron mass kg
-
-# Pu-239 nuclear data (fission-spectrum averaged)
-PU239_DATA = {
-    "name": "Pu-239",
-    "A": 239.0,
-    "M": 239.0521634,
-    "rho_0": 19.86e3,  # kg/m³
-    "sigma_f": 1.800,  # barns
-    "sigma_el": 4.566,
-    "sigma_inel": 1.369,
-    "sigma_c": 0.065,
-    "nu_prompt": 3.165,
-    "E_fission": 200.0,  # MeV
-    "a_watt": 0.966,
-    "b_watt": 2.842,
-}
+import nuclear_physics as nuc
+import animation_data as anim_data
 
 
-def get_neutron_velocity():
-    """Average fission neutron velocity from Watt spectrum."""
-    a, b = PU239_DATA["a_watt"], PU239_DATA["b_watt"]
-    E_avg_MeV = 1.5 * a + 0.25 * a**2 * b
-    E_avg_J = E_avg_MeV * MEV_TO_J
-    return np.sqrt(2 * E_avg_J / m_n)
+CORE_COLOR = RED
+TAMPER_COLOR = ORANGE
+PUSHER_COLOR = BLUE_C
+HE_COLOR = GRAY
+NEUTRON_COLOR = YELLOW
 
 
-def compute_diffusion_params(compression=1.0):
-    """Compute diffusion parameters for Pu-239."""
-    data = PU239_DATA
-    rho = data["rho_0"] * compression
-    n = rho / (data["M"] * AMU_TO_KG)  # atoms/m³
-
-    sigma_s = data["sigma_el"] + data["sigma_inel"]
-    sigma_t = data["sigma_f"] + sigma_s + data["sigma_c"]
-    sigma_a = data["sigma_f"] + data["sigma_c"]
-
-    Sigma_f = data["sigma_f"] * BARN_TO_M2 * n
-    Sigma_s = sigma_s * BARN_TO_M2 * n
-    Sigma_a = sigma_a * BARN_TO_M2 * n
-    Sigma_t = sigma_t * BARN_TO_M2 * n
-
-    mu_0 = 2.0 / (3.0 * data["A"])
-    Sigma_tr = Sigma_t - mu_0 * Sigma_s
-
-    lambda_tr = 1.0 / Sigma_tr
-    D = lambda_tr / 3.0
-
-    c = Sigma_s / Sigma_t
-    correction = (1.0 - c) / 5.0
-    D_tr = D * (1.0 - correction)
-
-    B_m_sq = (data["nu_prompt"] * Sigma_f - Sigma_a) / D_tr
-    k_inf = data["nu_prompt"] * Sigma_f / Sigma_a
-
-    v = get_neutron_velocity()
-    tau = 1.0 / (v * Sigma_f * data["nu_prompt"])
-
-    return {
-        "D_tr": D_tr,
-        "lambda_tr": lambda_tr,
-        "B_m_sq": B_m_sq,
-        "k_inf": k_inf,
-        "tau": tau,
-        "Sigma_f": Sigma_f,
-        "Sigma_a": Sigma_a,
-        "v": v,
-        "c": c,
-    }
-
-
-def compute_critical_radius(compression=1.0):
-    """Critical radius for bare Pu-239 sphere."""
-    params = compute_diffusion_params(compression)
-    c = params["c"]
-    delta = 0.7104 * params["lambda_tr"] * (1.0 - 0.25 * (1.0 - c))
-    R_prime_c = np.pi / np.sqrt(params["B_m_sq"])
-    return R_prime_c - delta, params
-
-
-def compute_critical_mass(compression=1.0):
-    """Critical mass for bare Pu-239 sphere."""
-    R_c, params = compute_critical_radius(compression)
-    volume = (4.0 / 3.0) * np.pi * R_c**3
-    mass = volume * PU239_DATA["rho_0"] * compression
-    return mass, R_c, params
-
-
-# =============================================================================
-# Scene 1: Critical Mass Concept
-# =============================================================================
-
-
-class CriticalMassScene(Scene):
-    """
-    Visualize the concept of critical mass through neutron multiplication.
-    Shows subcritical, critical, and supercritical regimes.
-    """
-
+class ImplosionSequence(Scene):
     def construct(self):
-        # Title
-        title = Text("Critical Mass", font_size=48).to_edge(UP)
+        title = Text("Implosion Assembly", font_size=44).to_edge(UP)
         self.play(Write(title))
 
-        # Create sphere visualization
-        sphere_radius = 1.5
+        data = anim_data.generate_implosion_data(n_points=200)
 
-        # Subcritical demonstration
-        subcrit_label = Text("Subcritical (k < 1)", font_size=32, color=BLUE).next_to(
-            title, DOWN
+        scale = 2.5
+
+        def radius_to_screen(r_m: float) -> float:
+            return r_m * 100 * scale
+
+        R_core_0 = radius_to_screen(data.R_core[0])
+        R_tamper_0 = radius_to_screen(data.R_tamper[0])
+        R_pusher_0 = radius_to_screen(data.R_pusher[0])
+        R_outer_0 = min(radius_to_screen(data.R_outer[0]), 3.5)
+
+        core = Circle(radius=R_core_0, color=CORE_COLOR, fill_opacity=0.8)
+        tamper = Annulus(
+            inner_radius=R_core_0,
+            outer_radius=R_tamper_0,
+            color=TAMPER_COLOR,
+            fill_opacity=0.6,
         )
-        self.play(Write(subcrit_label))
-
-        sphere = Circle(radius=sphere_radius, color=BLUE, fill_opacity=0.3)
-        self.play(Create(sphere))
-
-        # Animate neutrons dying out
-        self.animate_neutron_chain(
-            sphere, generations=4, k_eff=0.7, color=BLUE, start_neutrons=1
+        pusher = Annulus(
+            inner_radius=R_tamper_0,
+            outer_radius=R_pusher_0,
+            color=PUSHER_COLOR,
+            fill_opacity=0.4,
         )
-
-        self.play(FadeOut(subcrit_label))
-
-        # Critical demonstration
-        crit_label = Text("Critical (k = 1)", font_size=32, color=YELLOW).next_to(
-            title, DOWN
-        )
-        self.play(Write(crit_label), sphere.animate.set_color(YELLOW))
-
-        self.animate_neutron_chain(
-            sphere, generations=5, k_eff=1.0, color=YELLOW, start_neutrons=1
-        )
-
-        self.play(FadeOut(crit_label))
-
-        # Supercritical demonstration
-        supercrit_label = Text(
-            "Supercritical (k > 1)", font_size=32, color=RED
-        ).next_to(title, DOWN)
-        self.play(Write(supercrit_label), sphere.animate.set_color(RED))
-
-        self.animate_neutron_chain(
-            sphere, generations=5, k_eff=1.8, color=RED, start_neutrons=1
+        he_shell = Annulus(
+            inner_radius=R_pusher_0,
+            outer_radius=R_outer_0,
+            color=HE_COLOR,
+            fill_opacity=0.3,
         )
 
-        # Show exponential growth equation
-        equation = MathTex(
-            r"N(t) = N_0 \cdot e^{\alpha t}", r"\quad \alpha = \frac{k-1}{\tau}"
-        ).next_to(sphere, DOWN, buff=0.5)
-        self.play(Write(equation))
+        assembly = VGroup(he_shell, pusher, tamper, core)
+        assembly.move_to(LEFT * 2.5)
 
-        self.wait(2)
-
-        # Clean up
-        self.play(FadeOut(VGroup(title, supercrit_label, sphere, equation)))
-
-        # Show critical mass calculation
-        self.show_critical_mass_calculation()
-
-    def animate_neutron_chain(
-        self, sphere, generations, k_eff, color, start_neutrons=1
-    ):
-        """Animate neutron chain reaction."""
-        neutrons = []
-        center = sphere.get_center()
-        radius = sphere.radius
-
-        # Create initial neutron at center
-        for _ in range(start_neutrons):
-            n = Dot(center, color=color, radius=0.08)
-            neutrons.append(n)
-            self.play(FadeIn(n), run_time=0.3)
-
-        for gen in range(generations):
-            new_neutrons = []
-
-            for neutron in neutrons:
-                # Each neutron produces k_eff new neutrons on average
-                # Use probabilistic rounding
-                n_new = int(k_eff) + (1 if np.random.random() < (k_eff % 1) else 0)
-                n_new = min(n_new, 4)  # Cap for visualization
-
-                for _ in range(n_new):
-                    # Random direction
-                    theta = np.random.uniform(0, 2 * np.pi)
-                    phi = np.random.uniform(0, np.pi)
-                    r = np.random.uniform(0.3, 0.8) * radius
-
-                    new_pos = center + np.array(
-                        [
-                            r * np.sin(phi) * np.cos(theta),
-                            r * np.sin(phi) * np.sin(theta),
-                            0,
-                        ]
-                    )
-
-                    # Keep within sphere for visualization
-                    new_n = Dot(new_pos, color=color, radius=0.08)
-                    new_neutrons.append(new_n)
-
-            # Animate: old neutrons fade, new ones appear
-            if new_neutrons:
-                self.play(
-                    *[FadeOut(n) for n in neutrons],
-                    *[FadeIn(n) for n in new_neutrons],
-                    run_time=0.5,
-                )
-            else:
-                self.play(*[FadeOut(n) for n in neutrons], run_time=0.5)
-
-            neutrons = new_neutrons[:20]  # Limit for performance
-
-            if not neutrons:
-                break
-
-        # Clean up remaining neutrons
-        if neutrons:
-            self.play(*[FadeOut(n) for n in neutrons], run_time=0.3)
-
-    def show_critical_mass_calculation(self):
-        """Show the physics of critical mass calculation."""
-        title = Text("Pu-239 Critical Mass Calculation", font_size=40).to_edge(UP)
-        self.play(Write(title))
-
-        # Key equations
-        equations = (
+        labels = (
             VGroup(
-                MathTex(
-                    r"\text{Material buckling: } B_m^2 = \frac{\nu\Sigma_f - \Sigma_a}{D}"
-                ),
-                MathTex(
-                    r"\text{Geometric buckling: } B_g^2 = \left(\frac{\pi}{R + \delta}\right)^2"
-                ),
-                MathTex(r"\text{Criticality: } B_m^2 = B_g^2"),
-                MathTex(
-                    r"\text{Critical radius: } R_c = \frac{\pi}{\sqrt{B_m^2}} - \delta"
+                Text("Pu-239", font_size=16, color=CORE_COLOR),
+                Text("U-238", font_size=16, color=TAMPER_COLOR),
+                Text("Al", font_size=16, color=PUSHER_COLOR),
+                Text("HE", font_size=16, color=HE_COLOR),
+            )
+            .arrange(DOWN, aligned_edge=LEFT, buff=0.2)
+            .to_edge(RIGHT)
+            .shift(UP)
+        )
+
+        mass_labels = VGroup(
+            Text(f"{data.core_mass:.1f} kg", font_size=14),
+            Text(f"{data.tamper_mass:.0f} kg", font_size=14),
+            Text(f"{data.pusher_mass:.0f} kg", font_size=14),
+            Text(f"{data.outer_mass:.0f} kg", font_size=14),
+        )
+        for ml, l in zip(mass_labels, labels):
+            ml.next_to(l, RIGHT, buff=0.3)
+
+        self.play(Create(assembly), Write(labels), Write(mass_labels), run_time=2)
+
+        comp_tracker = ValueTracker(0)
+
+        comp_text = always_redraw(
+            lambda: VGroup(
+                MathTex(r"\rho/\rho_0 = "),
+                DecimalNumber(
+                    1.0 + (data.compression.max() - 1) * comp_tracker.get_value(),
+                    num_decimal_places=2,
                 ),
             )
-            .arrange(DOWN, aligned_edge=LEFT, buff=0.4)
-            .next_to(title, DOWN, buff=0.5)
+            .arrange(RIGHT)
+            .next_to(assembly, DOWN, buff=0.5)
         )
 
-        for eq in equations:
-            self.play(Write(eq), run_time=1)
+        time_text = always_redraw(
+            lambda: VGroup(
+                Text("t = ", font_size=20),
+                DecimalNumber(
+                    comp_tracker.get_value() * data.t[-1] * 1e6,
+                    num_decimal_places=1,
+                    unit=r"\mu s",
+                ),
+            )
+            .arrange(RIGHT)
+            .next_to(comp_text, DOWN)
+        )
+
+        self.add(comp_text, time_text)
+
+        def update_assembly(mob):
+            alpha = comp_tracker.get_value()
+            idx = int(alpha * (len(data.t) - 1))
+
+            R_core_new = radius_to_screen(data.R_core[idx])
+            R_tamper_new = radius_to_screen(data.R_tamper[idx])
+            R_pusher_new = radius_to_screen(data.R_pusher[idx])
+
+            core.become(Circle(radius=R_core_new, color=CORE_COLOR, fill_opacity=0.8))
+            tamper.become(
+                Annulus(
+                    inner_radius=R_core_new,
+                    outer_radius=R_tamper_new,
+                    color=TAMPER_COLOR,
+                    fill_opacity=0.6,
+                )
+            )
+            pusher.become(
+                Annulus(
+                    inner_radius=R_tamper_new,
+                    outer_radius=R_pusher_new,
+                    color=PUSHER_COLOR,
+                    fill_opacity=0.4,
+                )
+            )
+            he_shell.become(
+                Annulus(
+                    inner_radius=R_pusher_new,
+                    outer_radius=R_outer_0,
+                    color=HE_COLOR,
+                    fill_opacity=0.3,
+                )
+            )
+            VGroup(he_shell, pusher, tamper, core).move_to(LEFT * 2.5)
+
+        assembly.add_updater(update_assembly)
+        self.play(comp_tracker.animate.set_value(1.0), run_time=6, rate_func=smooth)
+        assembly.remove_updater(update_assembly)
+
+        crit_marker = Text("k = 1 CRITICAL", font_size=24, color=YELLOW)
+        crit_marker.next_to(core, UP, buff=0.3)
+        self.play(Write(crit_marker), core.animate.set_color(YELLOW))
 
         self.wait(1)
 
-        # Calculate and show actual values
-        mass, R_c, params = compute_critical_mass(compression=1.0)
-
-        results = (
-            VGroup(
-                Text(f"For bare Pu-239 sphere:", font_size=28),
-                MathTex(f"R_c = {R_c * 100:.2f}" + r"\text{ cm}"),
-                MathTex(f"M_c = {mass:.2f}" + r"\text{ kg}"),
-                MathTex(f"k_\\infty = {params['k_inf']:.3f}"),
-            )
-            .arrange(DOWN, aligned_edge=LEFT, buff=0.3)
-            .to_edge(RIGHT)
-            .shift(DOWN)
+        supercrit = Text("SUPERCRITICAL", font_size=28, color=RED)
+        supercrit.next_to(crit_marker, UP)
+        self.play(
+            Write(supercrit),
+            core.animate.set_color(WHITE),
+            Flash(core, color=WHITE, line_length=0.3),
         )
 
-        box = SurroundingRectangle(results, color=YELLOW, buff=0.2)
-
-        self.play(Write(results), Create(box))
-        self.wait(3)
-
-        self.play(FadeOut(VGroup(title, equations, results, box)))
+        self.wait(2)
 
 
-# =============================================================================
-# Scene 2: Neutron Flux Distribution
-# =============================================================================
-
-
-class NeutronFluxScene(Scene):
-    """
-    Visualize 2D neutron flux distribution in a sphere.
-    Shows the fundamental mode (cosine/Bessel) shape.
-    """
-
+class FVMGridVisualization(Scene):
     def construct(self):
-        title = Text("Neutron Flux Distribution", font_size=44).to_edge(UP)
+        title = Text("Finite Volume Discretization", font_size=40).to_edge(UP)
         self.play(Write(title))
 
-        # Compute critical parameters
-        R_c, params = compute_critical_radius(compression=1.0)
-        B = np.sqrt(params["B_m_sq"])
+        subtitle = Text("2D Axisymmetric (r, z) Mesh", font_size=24, color=GRAY)
+        subtitle.next_to(title, DOWN)
+        self.play(Write(subtitle))
 
-        # Create 2D flux visualization
-        axes = Axes(
-            x_range=[-1.5, 1.5, 0.5],
-            y_range=[-1.5, 1.5, 0.5],
-            x_length=5,
-            y_length=5,
-            axis_config={"include_tip": False},
-        ).shift(LEFT * 2)
+        fvm = anim_data.generate_fvm_cell_data(Nr=15, Nz=30)
 
-        axes_labels = axes.get_axis_labels(x_label="r/R_c", y_label="z/R_c")
+        grid_width = 5.0
+        grid_height = 4.0
 
-        self.play(Create(axes), Write(axes_labels))
+        r_max = fvm.r_faces[-1]
+        z_max = fvm.z_faces[-1]
+        z_min = fvm.z_faces[0]
 
-        # Create heatmap of flux
-        # φ(r,z) ∝ j0(B*r) * cos(Bz) for cylinder, sin(Br)/r for sphere
-        resolution = 50
-        x_vals = np.linspace(-1.4, 1.4, resolution)
-        y_vals = np.linspace(-1.4, 1.4, resolution)
+        def r_to_x(r):
+            return (r / r_max) * grid_width - grid_width / 2
 
-        # Create flux field (spherical fundamental mode)
-        flux_field = VGroup()
-        max_flux = 1.0
+        def z_to_y(z):
+            return ((z - z_min) / (z_max - z_min)) * grid_height - grid_height / 2
 
-        for i, x in enumerate(x_vals):
-            for j, y in enumerate(y_vals):
-                r_norm = np.sqrt(x**2 + y**2)
-                if r_norm <= 1.0:
-                    # Fundamental mode: sin(πr/R')/(r/R') normalized
-                    if r_norm < 0.01:
-                        flux = 1.0
-                    else:
-                        flux = np.sin(np.pi * r_norm) / (np.pi * r_norm)
-                    flux = max(0, flux)
-                else:
-                    flux = 0
+        grid_lines = VGroup()
 
-                if flux > 0.01:
-                    # Map to color
-                    color = interpolate_color(BLUE, RED, flux)
-                    point = axes.c2p(x, y)
-                    dot = Dot(point, radius=0.06, color=color, fill_opacity=flux)
-                    flux_field.add(dot)
+        for r in fvm.r_faces[::2]:
+            x = r_to_x(r)
+            line = Line(
+                start=np.array([x, z_to_y(z_min), 0]),
+                end=np.array([x, z_to_y(z_max), 0]),
+                stroke_width=0.5,
+                color=GRAY,
+            )
+            grid_lines.add(line)
 
-        self.play(FadeIn(flux_field), run_time=2)
+        for z in fvm.z_faces[::2]:
+            y = z_to_y(z)
+            line = Line(
+                start=np.array([r_to_x(0), y, 0]),
+                end=np.array([r_to_x(r_max), y, 0]),
+                stroke_width=0.5,
+                color=GRAY,
+            )
+            grid_lines.add(line)
 
-        # Add sphere boundary
-        sphere_boundary = Circle(radius=axes.x_length / 3, color=WHITE, stroke_width=2)
-        sphere_boundary.move_to(axes.c2p(0, 0))
-        self.play(Create(sphere_boundary))
+        grid_lines.shift(LEFT * 2)
+        self.play(Create(grid_lines), run_time=2)
 
-        # Add 1D profile
+        axis_r = Arrow(
+            start=np.array([r_to_x(0) - 2, z_to_y(z_min) - 0.3, 0]),
+            end=np.array([r_to_x(r_max) - 2 + 0.5, z_to_y(z_min) - 0.3, 0]),
+            color=WHITE,
+            buff=0,
+        )
+        axis_z = Arrow(
+            start=np.array([r_to_x(0) - 2 - 0.3, z_to_y(z_min), 0]),
+            end=np.array([r_to_x(0) - 2 - 0.3, z_to_y(z_max) + 0.5, 0]),
+            color=WHITE,
+            buff=0,
+        )
+        r_label = MathTex("r").next_to(axis_r, RIGHT)
+        z_label = MathTex("z").next_to(axis_z, UP)
+
+        self.play(Create(axis_r), Create(axis_z), Write(r_label), Write(z_label))
+
+        phi_max = np.max(fvm.source)
+        cells = VGroup()
+
+        Nr, Nz = len(fvm.r_centers), len(fvm.z_centers)
+
+        for i in range(0, Nr, 2):
+            for j in range(0, Nz, 2):
+                if fvm.D[i, j] > 0.01:
+                    phi_norm = fvm.source[i, j] / phi_max if phi_max > 0 else 0
+                    color = interpolate_color(BLUE, RED, min(phi_norm, 1.0))
+
+                    r0, r1 = fvm.r_faces[i], fvm.r_faces[min(i + 2, Nr)]
+                    z0, z1 = fvm.z_faces[j], fvm.z_faces[min(j + 2, Nz)]
+
+                    x0, x1 = r_to_x(r0) - 2, r_to_x(r1) - 2
+                    y0, y1 = z_to_y(z0), z_to_y(z1)
+
+                    cell = Rectangle(
+                        width=x1 - x0,
+                        height=y1 - y0,
+                        fill_color=color,
+                        fill_opacity=0.7,
+                        stroke_width=0,
+                    ).move_to(np.array([(x0 + x1) / 2, (y0 + y1) / 2, 0]))
+                    cells.add(cell)
+
+        self.play(FadeIn(cells), run_time=2)
+
+        equations = (
+            VGroup(
+                MathTex(
+                    r"-\nabla \cdot (D \nabla \phi) + \Sigma_a \phi = \nu \Sigma_f \phi"
+                ),
+                MathTex(
+                    r"\text{FVM: } \sum_{\text{faces}} D_f A_f \frac{\partial \phi}{\partial n} = V(\nu\Sigma_f - \Sigma_a)\phi"
+                ),
+            )
+            .arrange(DOWN, buff=0.3)
+            .scale(0.7)
+            .to_edge(RIGHT)
+            .shift(UP)
+        )
+
+        box = SurroundingRectangle(equations, color=BLUE, buff=0.2)
+        self.play(Write(equations), Create(box))
+
+        legend_title = Text("Fission Source", font_size=18)
+        gradient = Rectangle(width=2, height=0.3, fill_opacity=1, stroke_width=0)
+        gradient.set_color(color=BLUE)
+        low_label = Text("Low", font_size=14).next_to(gradient, LEFT)
+        high_label = Text("High", font_size=14).next_to(gradient, RIGHT)
+
+        legend_title.next_to(gradient, UP)
+        VGroup(legend_title, gradient, low_label, high_label).to_edge(DOWN)
+
+        self.play(
+            Write(legend_title), Create(gradient), Write(low_label), Write(high_label)
+        )
+        self.wait(3)
+
+
+class FluxEvolutionScene(Scene):
+    def construct(self):
+        title = Text("Neutron Flux Evolution", font_size=40).to_edge(UP)
+        self.play(Write(title))
+
+        flux_data = anim_data.generate_flux_field(compression=2.5, Nr=40, Nz=80)
+
+        width, height = 4.0, 6.0
+        r_max = flux_data.R_max
+        z_max = flux_data.Z_max / 2
+        z_min = -z_max
+
+        def create_flux_heatmap(phi: np.ndarray, sphere_r: float) -> VGroup:
+            heatmap = VGroup()
+            phi_max = np.max(phi)
+            if phi_max <= 0:
+                return heatmap
+
+            Nr, Nz = phi.shape
+            dr = r_max / Nr
+            dz = (z_max - z_min) / Nz
+
+            for i in range(0, Nr, 2):
+                for j in range(0, Nz, 2):
+                    r = flux_data.r[i]
+                    z = flux_data.z[j]
+                    dist = np.sqrt(r**2 + z**2)
+                    if dist > sphere_r * 1.2:
+                        continue
+
+                    phi_val = phi[i, j]
+                    if phi_val < 0.01 * phi_max:
+                        continue
+
+                    phi_norm = np.log10(phi_val / phi_max + 1e-10) / np.log10(1.0)
+                    phi_norm = max(0, min(1, (phi_norm + 3) / 3))
+                    color = interpolate_color(BLUE_E, RED, phi_norm)
+
+                    x = (r / r_max) * width / 2
+                    y = ((z - z_min) / (z_max - z_min) - 0.5) * height
+                    cell_w = (dr / r_max) * width / 2 * 2
+                    cell_h = (dz / (z_max - z_min)) * height * 2
+
+                    rect = Rectangle(
+                        width=cell_w,
+                        height=cell_h,
+                        fill_color=color,
+                        fill_opacity=0.8,
+                        stroke_width=0,
+                    ).move_to(np.array([x, y, 0]))
+                    heatmap.add(rect)
+
+            return heatmap
+
+        heatmap = create_flux_heatmap(flux_data.phi, flux_data.sphere_radius)
+        heatmap.shift(LEFT * 2)
+
+        sphere_screen_r = (flux_data.sphere_radius / r_max) * width / 2
+        sphere_outline = Circle(radius=sphere_screen_r, color=WHITE, stroke_width=2)
+        sphere_outline.shift(LEFT * 2)
+
+        self.play(FadeIn(heatmap), Create(sphere_outline), run_time=2)
+
+        info = (
+            VGroup(
+                MathTex(f"k_{{eff}} = {flux_data.k_eff:.4f}"),
+                MathTex(f"\\rho/\\rho_0 = {flux_data.compression:.1f}"),
+                MathTex(f"R = {flux_data.sphere_radius * 100:.2f}" + r"\text{ cm}"),
+            )
+            .arrange(DOWN, aligned_edge=LEFT)
+            .scale(0.8)
+            .to_edge(RIGHT)
+            .shift(UP)
+        )
+
+        self.play(Write(info))
+
         profile_axes = (
             Axes(
                 x_range=[0, 1.2, 0.2],
                 y_range=[0, 1.2, 0.2],
-                x_length=4,
-                y_length=3,
+                x_length=3,
+                y_length=2.5,
                 axis_config={"include_tip": False},
             )
             .to_edge(RIGHT)
-            .shift(UP * 0.5)
+            .shift(DOWN * 1.5)
         )
 
         profile_labels = profile_axes.get_axis_labels(
-            x_label=MathTex("r/R_c"), y_label=MathTex(r"\phi/\phi_0")
+            x_label=MathTex(r"r/R"), y_label=MathTex(r"\phi/\phi_{max}")
         )
 
         self.play(Create(profile_axes), Write(profile_labels))
 
-        # Flux profile
-        def flux_profile(r):
-            if r < 0.01:
-                return 1.0
-            elif r <= 1.0:
-                return np.sin(np.pi * r) / (np.pi * r)
-            else:
-                return 0
-
-        flux_curve = profile_axes.plot(
-            flux_profile, x_range=[0.01, 1.0], color=YELLOW, stroke_width=3
+        mid_j = flux_data.Nz // 2
+        r_norm = flux_data.r / flux_data.sphere_radius
+        phi_profile = flux_data.phi[:, mid_j]
+        phi_norm = (
+            phi_profile / np.max(phi_profile)
+            if np.max(phi_profile) > 0
+            else phi_profile
         )
-        self.play(Create(flux_curve))
 
-        # Add equation
-        equation = MathTex(
-            r"\phi(r) = \phi_0 \frac{\sin(\pi r / R')}{(\pi r / R')}"
+        valid = r_norm <= 1.2
+        profile_curve = profile_axes.plot_line_graph(
+            r_norm[valid],
+            phi_norm[valid],
+            add_vertex_dots=False,
+            line_color=YELLOW,
+            stroke_width=2,
+        )
+
+        self.play(Create(profile_curve))
+
+        theory_label = MathTex(
+            r"\phi(r) \propto \frac{\sin(\pi r/R')}{\pi r/R'}", font_size=28
         ).next_to(profile_axes, DOWN)
-        self.play(Write(equation))
-
-        # Highlight that flux → 0 at extrapolated boundary
-        extrap_note = Text(
-            "φ → 0 at extrapolated boundary R' = R + δ", font_size=20, color=GRAY
-        ).next_to(equation, DOWN)
-        self.play(Write(extrap_note))
+        self.play(Write(theory_label))
 
         self.wait(3)
-        self.play(
-            FadeOut(
-                VGroup(
-                    title,
-                    axes,
-                    axes_labels,
-                    flux_field,
-                    sphere_boundary,
-                    profile_axes,
-                    profile_labels,
-                    flux_curve,
-                    equation,
-                    extrap_note,
-                )
-            )
-        )
 
 
-# =============================================================================
-# Scene 3: Supercritical Excursion
-# =============================================================================
-
-
-class SupercriticalExcursionScene(Scene):
-    """
-    Animate a supercritical excursion showing:
-    1. Exponential neutron growth
-    2. Energy deposition
-    3. Hydrodynamic expansion (disassembly)
-    4. Final yield
-    """
-
+class SupercriticalExcursion(Scene):
     def construct(self):
         title = Text("Supercritical Excursion", font_size=44).to_edge(UP)
         self.play(Write(title))
 
-        # Create visualization area
-        sphere = Circle(radius=1.5, color=RED, fill_opacity=0.3, stroke_width=3)
-        sphere_label = MathTex("R = 1.2 R_c").next_to(sphere, DOWN)
-        self.play(Create(sphere), Write(sphere_label))
+        exc = anim_data.generate_excursion_data()
+        t_us = exc.t * 1e6
 
-        # Create graphs for time evolution
-        # Neutron population graph
-        n_axes = (
-            Axes(
-                x_range=[0, 10, 2],
-                y_range=[0, 30, 5],
-                x_length=4,
-                y_length=2.5,
-                axis_config={"include_tip": False},
-            )
-            .to_edge(RIGHT)
-            .shift(UP * 1.5)
+        sphere = Circle(radius=1.5, color=RED, fill_opacity=0.4)
+        sphere.shift(LEFT * 3.5)
+        self.play(Create(sphere))
+
+        n_axes = Axes(
+            x_range=[0, t_us[-1], t_us[-1] / 4],
+            y_range=[0, 35, 5],
+            x_length=4,
+            y_length=2,
+            axis_config={"include_tip": False},
+        ).shift(RIGHT * 2.5 + UP * 2)
+        n_label = Text("log₁₀(N)", font_size=16).next_to(n_axes, UP, buff=0.1)
+
+        alpha_axes = Axes(
+            x_range=[0, t_us[-1], t_us[-1] / 4],
+            y_range=[-2, 10, 2],
+            x_length=4,
+            y_length=2,
+            axis_config={"include_tip": False},
+        ).shift(RIGHT * 2.5)
+        alpha_label = Text("α (10⁸/s)", font_size=16).next_to(alpha_axes, UP, buff=0.1)
+
+        T_axes = Axes(
+            x_range=[0, t_us[-1], t_us[-1] / 4],
+            y_range=[0, 12, 2],
+            x_length=4,
+            y_length=2,
+            axis_config={"include_tip": False},
+        ).shift(RIGHT * 2.5 + DOWN * 2)
+        T_label = Text("T (10⁸ K)", font_size=16).next_to(T_axes, UP, buff=0.1)
+        x_label = Text("t (μs)", font_size=14).next_to(T_axes, DOWN, buff=0.1)
+
+        self.play(
+            Create(n_axes),
+            Write(n_label),
+            Create(alpha_axes),
+            Write(alpha_label),
+            Create(T_axes),
+            Write(T_label),
+            Write(x_label),
         )
-        n_labels = n_axes.get_axis_labels(
-            x_label=MathTex(r"t/\tau"), y_label=MathTex(r"\log N")
-        )
 
-        # Temperature graph
-        T_axes = (
-            Axes(
-                x_range=[0, 10, 2],
-                y_range=[0, 10, 2],
-                x_length=4,
-                y_length=2.5,
-                axis_config={"include_tip": False},
-            )
-            .to_edge(RIGHT)
-            .shift(DOWN * 1.5)
-        )
-        T_labels = T_axes.get_axis_labels(
-            x_label=MathTex(r"t/\tau"), y_label=MathTex(r"T (keV)")
-        )
+        time_tracker = ValueTracker(0)
+        R_0 = exc.R[0]
 
-        self.play(Create(n_axes), Write(n_labels), Create(T_axes), Write(T_labels))
+        def get_current_index():
+            t_current = time_tracker.get_value()
+            idx = np.searchsorted(t_us, t_current)
+            return min(idx, len(t_us) - 1)
 
-        # Simulate supercritical excursion
-        # Simplified model: dN/dt = α*N, dE/dt = E_f * N * Σ_f
-        R_ratio = 1.2  # R/R_c
-        k_eff = R_ratio**2 * 1.0  # Approximate k scaling
-        alpha = (k_eff - 1) / 1.0  # Rossi alpha (normalized)
+        log_N = np.log10(exc.N + 1)
+        log_N_scaled = log_N / log_N.max() * 30
+        alpha_scaled = exc.alpha / 1e8
+        T_scaled = exc.T / 1e8
 
-        t_vals = np.linspace(0, 10, 100)
-        N_vals = np.exp(alpha * t_vals)
-        N_vals = np.minimum(N_vals, 1e12)  # Cap for log plot
-
-        # Energy accumulation (integral of N)
-        E_vals = np.cumsum(N_vals) * (t_vals[1] - t_vals[0])
-        # Temperature ∝ E^(1/4) roughly (radiation dominated)
-        T_vals = (E_vals / E_vals[-1]) ** 0.25 * 10  # Scale to keV
-
-        # Animate the excursion
-        n_tracker = ValueTracker(0)
-
-        # Neutron curve (log scale representation)
-        def get_n_curve():
-            t_max = n_tracker.get_value()
-            if t_max < 0.1:
-                return VGroup()
-            idx = int(t_max / 10 * len(t_vals))
-            idx = max(1, min(idx, len(t_vals)))
-            return n_axes.plot_line_graph(
-                t_vals[:idx],
-                np.log10(N_vals[:idx] + 1) * 3,  # Scale for visibility
+        n_curve = always_redraw(
+            lambda: n_axes.plot_line_graph(
+                t_us[: get_current_index() + 1],
+                log_N_scaled[: get_current_index() + 1],
                 add_vertex_dots=False,
                 line_color=YELLOW,
+                stroke_width=2,
             )
-
-        def get_T_curve():
-            t_max = n_tracker.get_value()
-            if t_max < 0.1:
-                return VGroup()
-            idx = int(t_max / 10 * len(t_vals))
-            idx = max(1, min(idx, len(t_vals)))
-            return T_axes.plot_line_graph(
-                t_vals[:idx], T_vals[:idx], add_vertex_dots=False, line_color=ORANGE
-            )
-
-        n_curve = always_redraw(get_n_curve)
-        T_curve = always_redraw(get_T_curve)
-
-        self.add(n_curve, T_curve)
-
-        # Sphere color and size change with temperature
-        def sphere_updater(s):
-            t = n_tracker.get_value()
-            idx = int(t / 10 * len(T_vals))
-            idx = max(0, min(idx, len(T_vals) - 1))
-            temp_frac = T_vals[idx] / 10.0
-
-            # Color: blue → red → white
-            if temp_frac < 0.5:
-                color = interpolate_color(RED, ORANGE, temp_frac * 2)
-            else:
-                color = interpolate_color(ORANGE, WHITE, (temp_frac - 0.5) * 2)
-
-            # Size expansion (hydrodynamic disassembly)
-            if t > 5:
-                expansion = 1 + 0.5 * ((t - 5) / 5) ** 2
-            else:
-                expansion = 1.0
-
-            s.set_fill(color, opacity=0.3 + 0.4 * temp_frac)
-            s.set_stroke(color)
-            s.scale_to_fit_width(3.0 * expansion)
-
-        sphere.add_updater(sphere_updater)
-
-        # Animate time evolution
-        self.play(n_tracker.animate.set_value(10), run_time=5, rate_func=linear)
-        sphere.remove_updater(sphere_updater)
-
-        # Show final yield
-        yield_text = Text("Yield ~ 15 kt", font_size=36, color=YELLOW)
-        yield_text.next_to(sphere, UP)
-        self.play(Write(yield_text))
-
-        # Rossi alpha explanation
-        rossi_eq = MathTex(
-            r"\alpha = \frac{k_{eff} - 1}{\tau} \approx 10^8 \text{ s}^{-1}"
-        ).to_edge(DOWN)
-        self.play(Write(rossi_eq))
-
-        self.wait(2)
-        self.play(
-            FadeOut(
-                VGroup(
-                    title,
-                    sphere,
-                    sphere_label,
-                    n_axes,
-                    n_labels,
-                    T_axes,
-                    T_labels,
-                    n_curve,
-                    T_curve,
-                    yield_text,
-                    rossi_eq,
-                )
-            )
+            if get_current_index() > 0
+            else VGroup()
         )
 
-
-# =============================================================================
-# Scene 4: Compression and Critical Mass
-# =============================================================================
-
-
-class CompressionScene(Scene):
-    """
-    Show how compression reduces critical mass.
-    M_c ∝ 1/ρ² (for constant k_eff)
-    """
-
-    def construct(self):
-        title = Text("Implosion: Compression Reduces Critical Mass", font_size=36)
-        title.to_edge(UP)
-        self.play(Write(title))
-
-        # Create compression visualization
-        # Initial sphere
-        initial_radius = 2.0
-        sphere = Circle(radius=initial_radius, color=BLUE, fill_opacity=0.3)
-
-        # Compression arrows
-        arrows = VGroup()
-        n_arrows = 8
-        for i in range(n_arrows):
-            angle = i * 2 * np.pi / n_arrows
-            start = np.array([2.5 * np.cos(angle), 2.5 * np.sin(angle), 0])
-            end = np.array([1.8 * np.cos(angle), 1.8 * np.sin(angle), 0])
-            arrow = Arrow(start, end, color=YELLOW, buff=0)
-            arrows.add(arrow)
-
-        self.play(Create(sphere), Create(arrows))
-
-        # Create graph
-        graph_axes = Axes(
-            x_range=[1, 3, 0.5],
-            y_range=[0, 10, 2],
-            x_length=5,
-            y_length=3,
-            axis_config={"include_tip": False},
-        ).to_edge(RIGHT)
-
-        graph_labels = graph_axes.get_axis_labels(
-            x_label=MathTex(r"\rho/\rho_0"), y_label=MathTex(r"M_c \text{ (kg)}")
+        alpha_curve = always_redraw(
+            lambda: alpha_axes.plot_line_graph(
+                t_us[: get_current_index() + 1],
+                alpha_scaled[: get_current_index() + 1],
+                add_vertex_dots=False,
+                line_color=GREEN,
+                stroke_width=2,
+            )
+            if get_current_index() > 0
+            else VGroup()
         )
 
-        self.play(Create(graph_axes), Write(graph_labels))
-
-        # Plot M_c vs compression
-        compressions = np.linspace(1.0, 3.0, 50)
-        masses = []
-        for c in compressions:
-            m, _, _ = compute_critical_mass(compression=c)
-            masses.append(m)
-
-        mass_curve = graph_axes.plot_line_graph(
-            compressions, masses, add_vertex_dots=False, line_color=GREEN
+        T_curve = always_redraw(
+            lambda: T_axes.plot_line_graph(
+                t_us[: get_current_index() + 1],
+                T_scaled[: get_current_index() + 1],
+                add_vertex_dots=False,
+                line_color=ORANGE,
+                stroke_width=2,
+            )
+            if get_current_index() > 0
+            else VGroup()
         )
-        self.play(Create(mass_curve))
 
-        # Animate compression
-        compression_tracker = ValueTracker(1.0)
+        self.add(n_curve, alpha_curve, T_curve)
 
         def update_sphere(s):
-            c = compression_tracker.get_value()
-            # Radius scales as 1/c^(1/3)
-            new_radius = initial_radius / (c ** (1 / 3))
-            s.scale_to_fit_width(2 * new_radius)
-            # Color intensity increases
-            s.set_fill(opacity=0.3 * c)
+            idx = get_current_index()
+            R_ratio = exc.R[idx] / R_0
+            new_radius = 1.5 * R_ratio
+            T_frac = exc.T[idx] / exc.T.max()
+
+            if T_frac < 0.3:
+                color = interpolate_color(RED, ORANGE, T_frac / 0.3)
+            elif T_frac < 0.7:
+                color = interpolate_color(ORANGE, YELLOW, (T_frac - 0.3) / 0.4)
+            else:
+                color = interpolate_color(YELLOW, WHITE, (T_frac - 0.7) / 0.3)
+
+            s.become(
+                Circle(
+                    radius=new_radius, color=color, fill_opacity=0.4 + 0.4 * T_frac
+                ).move_to(LEFT * 3.5)
+            )
 
         sphere.add_updater(update_sphere)
 
-        # Compression indicator
-        comp_text = always_redraw(
-            lambda: MathTex(
-                f"\\rho/\\rho_0 = {compression_tracker.get_value():.2f}"
-            ).next_to(sphere, DOWN)
+        yield_text = always_redraw(
+            lambda: Text(
+                f"Yield: {exc.yield_kt[get_current_index()]:.1f} kt", font_size=24
+            ).next_to(sphere, DOWN, buff=0.3)
         )
-        self.add(comp_text)
+        self.add(yield_text)
 
-        # Dot on curve
-        graph_dot = always_redraw(
-            lambda: Dot(
-                graph_axes.c2p(
-                    compression_tracker.get_value(),
-                    compute_critical_mass(compression_tracker.get_value())[0],
-                ),
-                color=RED,
-            )
-        )
-        self.add(graph_dot)
-
-        # Animate compression from 1x to 2.5x
         self.play(
-            compression_tracker.animate.set_value(2.5), run_time=4, rate_func=smooth
+            time_tracker.animate.set_value(t_us[-1]), run_time=8, rate_func=linear
         )
-
         sphere.remove_updater(update_sphere)
 
-        # Show scaling law
-        scaling_law = MathTex(r"M_c \propto \frac{1}{\rho^2}").to_edge(DOWN)
-        self.play(Write(scaling_law))
-
-        # Final values
-        m_1, R_1, _ = compute_critical_mass(1.0)
-        m_25, R_25, _ = compute_critical_mass(2.5)
-
-        comparison = (
-            VGroup(
-                Text(f"At ρ₀: M_c = {m_1:.1f} kg", font_size=24),
-                Text(f"At 2.5ρ₀: M_c = {m_25:.1f} kg", font_size=24),
-            )
-            .arrange(DOWN, aligned_edge=LEFT)
-            .next_to(scaling_law, UP)
+        final_yield = Text(
+            f"Final Yield: {exc.yield_kt[-1]:.1f} kt", font_size=32, color=YELLOW
         )
+        final_yield.next_to(sphere, UP, buff=0.5)
+        self.play(Write(final_yield), Flash(sphere, color=WHITE, line_length=0.5))
 
-        self.play(Write(comparison))
-        self.wait(3)
-
-
-# =============================================================================
-# Scene 5: Fizzle Probability
-# =============================================================================
+        self.wait(2)
 
 
-class FizzleScene(Scene):
-    """
-    Visualize predetonation (fizzle) probability due to Pu-240.
-    Shows Monte Carlo concept of spontaneous fission initiating chain.
-    """
-
+class DisassemblyScene(Scene):
     def construct(self):
-        title = Text("Predetonation Risk: The Fizzle Problem", font_size=36)
-        title.to_edge(UP)
+        title = Text("Hydrodynamic Disassembly", font_size=40).to_edge(UP)
         self.play(Write(title))
 
-        # Explanation
-        explanation = (
+        exc = anim_data.generate_excursion_data()
+        peak_idx = exc.i_peak_power
+        start_idx = max(0, peak_idx - len(exc.t) // 4)
+
+        t_slice = exc.t[start_idx:] - exc.t[start_idx]
+        R_slice = exc.R[start_idx:]
+        v_slice = exc.v[start_idx:]
+        alpha_slice = exc.alpha[start_idx:]
+
+        core = Circle(radius=1.5, color=WHITE, fill_opacity=0.6)
+        core.shift(LEFT * 3)
+
+        pressure_arrows = VGroup()
+        n_arrows = 12
+        for i in range(n_arrows):
+            angle = i * 2 * PI / n_arrows
+            arrow = Arrow(
+                start=core.get_center(),
+                end=core.get_center()
+                + 0.8 * np.array([np.cos(angle), np.sin(angle), 0]),
+                color=ORANGE,
+                buff=0.3,
+            )
+            pressure_arrows.add(arrow)
+
+        self.play(Create(core), Create(pressure_arrows))
+
+        info_text = (
             VGroup(
-                Text("Pu-240 undergoes spontaneous fission", font_size=24),
-                Text("→ Neutrons can start chain reaction early", font_size=24),
-                Text("→ Reduced yield ('fizzle')", font_size=24),
+                Text("Radiation Pressure:", font_size=20),
+                MathTex(r"P = \frac{E_{rad}}{3V} \propto T^4"),
+                Text("", font_size=12),
+                Text("Acceleration:", font_size=20),
+                MathTex(r"\frac{d^2R}{dt^2} = \frac{4\pi R^2 P}{M}"),
             )
             .arrange(DOWN, aligned_edge=LEFT)
-            .next_to(title, DOWN)
+            .to_edge(RIGHT)
+            .shift(UP)
         )
 
-        self.play(Write(explanation), run_time=2)
-        self.wait(1)
-        self.play(FadeOut(explanation))
+        self.play(Write(info_text))
 
-        # Create compression timeline visualization
-        timeline = Line(LEFT * 5, RIGHT * 5, color=WHITE)
-        timeline.shift(UP * 1)
-
-        # Mark key points
-        start_dot = Dot(LEFT * 5 + UP, color=GREEN)
-        crit_dot = Dot(LEFT * 2 + UP, color=YELLOW)
-        peak_dot = Dot(RIGHT * 2 + UP, color=RED)
-
-        start_label = Text("Start", font_size=20).next_to(start_dot, DOWN)
-        crit_label = Text("k=1", font_size=20).next_to(crit_dot, DOWN)
-        peak_label = Text("Peak ρ", font_size=20).next_to(peak_dot, DOWN)
-
-        self.play(
-            Create(timeline),
-            Create(VGroup(start_dot, crit_dot, peak_dot)),
-            Write(VGroup(start_label, crit_label, peak_label)),
-        )
-
-        # Supercritical window
-        window = Rectangle(width=4, height=0.5, color=RED, fill_opacity=0.3).move_to(
-            UP + RIGHT * 0
-        )
-        window_label = Text("Supercritical window", font_size=18, color=RED)
-        window_label.next_to(window, UP)
-
-        self.play(Create(window), Write(window_label))
-
-        # Monte Carlo visualization
-        mc_title = Text("Monte Carlo: 1000 trials", font_size=24).shift(DOWN * 0.5)
-        self.play(Write(mc_title))
-
-        # Simulate outcomes
-        np.random.seed(42)
-        n_trials = 1000
-        pu240_fraction = 0.06  # 6% Pu-240
-
-        # Spontaneous fission rate for Pu-240: ~1000 n/s/kg
-        # At ~5 kg: ~5000 n/s
-        # Supercritical window: ~10 μs
-        # Probability of SF during window: ~0.05
-
-        sf_rate = 1000 * pu240_fraction * 10  # n/s for our mass
-        window_time = 10e-6  # 10 μs
-
-        outcomes = []
-        for _ in range(n_trials):
-            # Poisson: number of SF events in window
-            n_sf = np.random.poisson(sf_rate * window_time)
-            if n_sf > 0:
-                # Early initiation - check if it leads to fizzle
-                # Probability of chain ≈ (k-1)/k during early supercritical
-                p_chain = 0.3  # Average during ramp-up
-                if np.random.random() < p_chain:
-                    outcomes.append("fizzle")
-                else:
-                    outcomes.append("nominal")
-            else:
-                outcomes.append("nominal")
-
-        n_fizzle = outcomes.count("fizzle")
-        fizzle_rate = n_fizzle / n_trials * 100
-
-        # Animated bar chart of results
-        bar_nominal = Rectangle(
-            width=2, height=3 * (1 - n_fizzle / n_trials), color=GREEN, fill_opacity=0.7
-        ).shift(DOWN * 2 + LEFT * 2)
-
-        bar_fizzle = Rectangle(
-            width=2, height=3 * (n_fizzle / n_trials), color=RED, fill_opacity=0.7
-        ).shift(DOWN * 2 + RIGHT * 2)
-
-        bar_nominal.align_to(DOWN * 3.5, DOWN)
-        bar_fizzle.align_to(DOWN * 3.5, DOWN)
-
-        label_nominal = Text(f"Nominal\n{100 - fizzle_rate:.1f}%", font_size=20)
-        label_nominal.next_to(bar_nominal, UP)
-
-        label_fizzle = Text(f"Fizzle\n{fizzle_rate:.1f}%", font_size=20)
-        label_fizzle.next_to(bar_fizzle, UP)
-
-        self.play(
-            GrowFromEdge(bar_nominal, DOWN),
-            GrowFromEdge(bar_fizzle, DOWN),
-            Write(label_nominal),
-            Write(label_fizzle),
-            run_time=2,
-        )
-
-        # Note about weapons-grade
-        note = Text(
-            f"At {pu240_fraction * 100:.0f}% Pu-240: ~{fizzle_rate:.0f}% fizzle risk",
-            font_size=24,
-            color=YELLOW,
-        ).to_edge(DOWN)
-        self.play(Write(note))
-
-        self.wait(3)
-
-
-# =============================================================================
-# Scene 6: Geometry Comparison
-# =============================================================================
-
-
-class GeometryComparisonScene(Scene):
-    """
-    Compare critical masses for different geometries:
-    - Sphere (optimal)
-    - Cylinder
-    - Ellipsoid
-    """
-
-    def construct(self):
-        title = Text("Geometry Effects on Criticality", font_size=40)
-        title.to_edge(UP)
-        self.play(Write(title))
-
-        subtitle = Text(
-            "Surface-to-volume ratio determines neutron leakage",
-            font_size=24,
-            color=GRAY,
-        ).next_to(title, DOWN)
-        self.play(Write(subtitle))
-
-        # Create three geometries
-        sphere = Circle(radius=1, color=GREEN, fill_opacity=0.3)
-        sphere_label = Text("Sphere", font_size=24).next_to(sphere, DOWN)
-
-        # Cylinder (ellipse representation for 2D)
-        cylinder = Ellipse(width=1.5, height=2.5, color=YELLOW, fill_opacity=0.3)
-        cylinder_label = Text("Cylinder", font_size=24).next_to(cylinder, DOWN)
-
-        # Ellipsoid (oblate)
-        ellipsoid = Ellipse(width=2.5, height=1.2, color=RED, fill_opacity=0.3)
-        ellipsoid_label = Text("Ellipsoid", font_size=24).next_to(ellipsoid, DOWN)
-
-        shapes = (
-            VGroup(
-                VGroup(sphere, sphere_label),
-                VGroup(cylinder, cylinder_label),
-                VGroup(ellipsoid, ellipsoid_label),
+        v_axes = (
+            Axes(
+                x_range=[0, t_slice[-1] * 1e6, 0.2],
+                y_range=[0, v_slice.max() / 1000 * 1.1, 100],
+                x_length=4,
+                y_length=2.5,
+                axis_config={"include_tip": False},
             )
-            .arrange(RIGHT, buff=1.5)
-            .shift(UP * 0.5)
-        )
-
-        self.play(
-            Create(sphere),
-            Write(sphere_label),
-            Create(cylinder),
-            Write(cylinder_label),
-            Create(ellipsoid),
-            Write(ellipsoid_label),
-        )
-
-        # Surface to volume ratios
-        # Sphere: S/V = 3/R (minimum for given V)
-        # Cylinder (L=2R): S/V = 4/R
-        # Oblate ellipsoid (a=2c): S/V ≈ 3.3/R_eq
-
-        ratios = (
-            VGroup(
-                MathTex(r"\frac{S}{V} = \frac{3}{R}", color=GREEN),
-                MathTex(r"\frac{S}{V} = \frac{4}{R}", color=YELLOW),
-                MathTex(r"\frac{S}{V} \approx \frac{3.5}{R}", color=RED),
-            )
-            .arrange(RIGHT, buff=1.5)
+            .to_edge(RIGHT)
             .shift(DOWN * 1.5)
         )
 
-        self.play(Write(ratios))
+        v_label = Text("Expansion v (km/s)", font_size=16).next_to(v_axes, UP)
+        t_label = Text("t (μs)", font_size=14).next_to(v_axes, DOWN)
 
-        # Critical mass comparison
-        masses = (
-            VGroup(
-                Text("M_c = 8.9 kg", font_size=24, color=GREEN),
-                Text("M_c = 12.1 kg", font_size=24, color=YELLOW),
-                Text("M_c = 10.5 kg", font_size=24, color=RED),
+        self.play(Create(v_axes), Write(v_label), Write(t_label))
+
+        time_tracker = ValueTracker(0)
+
+        def get_idx():
+            t_current = time_tracker.get_value() * 1e-6
+            idx = np.searchsorted(t_slice, t_current)
+            return min(idx, len(t_slice) - 1)
+
+        v_curve = always_redraw(
+            lambda: v_axes.plot_line_graph(
+                t_slice[: get_idx() + 1] * 1e6,
+                v_slice[: get_idx() + 1] / 1000,
+                add_vertex_dots=False,
+                line_color=BLUE,
+                stroke_width=2,
             )
-            .arrange(RIGHT, buff=1.2)
-            .shift(DOWN * 2.5)
+            if get_idx() > 0
+            else VGroup()
         )
 
-        self.play(Write(masses))
+        self.add(v_curve)
 
-        # Key insight
-        insight = Text(
-            "Sphere minimizes surface area → minimum leakage → minimum critical mass",
-            font_size=22,
-            color=BLUE,
-        ).to_edge(DOWN)
-        self.play(Write(insight))
+        def update_core(c):
+            idx = get_idx()
+            scale = R_slice[idx] / R_slice[0]
+            alpha_val = alpha_slice[idx]
+            color = WHITE if alpha_val > 0 else BLUE
+            c.become(
+                Circle(
+                    radius=min(1.5 * scale, 3.5),
+                    color=color,
+                    fill_opacity=max(0.1, 0.6 / scale),
+                ).move_to(LEFT * 3)
+            )
 
-        self.wait(3)
+        def update_arrows(arrows):
+            idx = get_idx()
+            scale = R_slice[idx] / R_slice[0]
+            for i, arrow in enumerate(arrows):
+                angle = i * 2 * PI / n_arrows
+                center = LEFT * 3
+                r = 0.8 * scale
+                arrow.become(
+                    Arrow(
+                        start=center,
+                        end=center
+                        + min(r, 2.5) * np.array([np.cos(angle), np.sin(angle), 0]),
+                        color=interpolate_color(ORANGE, BLUE, min(1, (scale - 1) / 2)),
+                        buff=0.3 * scale,
+                    )
+                )
 
-        # Morph sphere to show optimality
+        core.add_updater(update_core)
+        pressure_arrows.add_updater(update_arrows)
+
         self.play(
-            sphere.animate.scale(1.3),
-            cylinder.animate.set_opacity(0.1),
-            ellipsoid.animate.set_opacity(0.1),
+            time_tracker.animate.set_value(t_slice[-1] * 1e6),
+            run_time=6,
+            rate_func=linear,
         )
 
-        optimal = Text("OPTIMAL", font_size=20, color=GREEN)
-        optimal.next_to(sphere, UP)
-        self.play(Write(optimal))
+        core.remove_updater(update_core)
+        pressure_arrows.remove_updater(update_arrows)
+
+        subcrit_text = Text("SUBCRITICAL (α < 0)", font_size=24, color=BLUE)
+        subcrit_text.next_to(core, DOWN)
+        self.play(Write(subcrit_text))
 
         self.wait(2)
 
 
-# =============================================================================
-# Scene 7: Complete Overview
-# =============================================================================
-
-
-class NuclearPhysicsOverview(Scene):
-    """
-    Complete overview combining all concepts.
-    """
-
+class CompositeOverlay(Scene):
     def construct(self):
-        # Title
-        title = Text("Nuclear Criticality: Key Concepts", font_size=44)
-        title.to_edge(UP)
+        title = Text("Nuclear Excursion - Multi-View", font_size=36).to_edge(UP)
         self.play(Write(title))
 
-        # Create concept map
-        concepts = VGroup(
-            VGroup(
-                Text("1. Neutron Multiplication", font_size=24, color=BLUE),
-                MathTex(
-                    r"k = \frac{\text{neutrons in gen } n+1}{\text{neutrons in gen } n}"
-                ),
-            ).arrange(DOWN, buff=0.2),
-            VGroup(
-                Text("2. Critical Mass", font_size=24, color=GREEN),
-                MathTex(r"M_c = \frac{4\pi}{3} R_c^3 \rho"),
-            ).arrange(DOWN, buff=0.2),
-            VGroup(
-                Text("3. Compression", font_size=24, color=YELLOW),
-                MathTex(r"M_c \propto \rho^{-2}"),
-            ).arrange(DOWN, buff=0.2),
-            VGroup(
-                Text("4. Rossi Alpha", font_size=24, color=ORANGE),
-                MathTex(r"\alpha = \frac{k-1}{\tau} \sim 10^8 \text{ s}^{-1}"),
-            ).arrange(DOWN, buff=0.2),
-            VGroup(
-                Text("5. Yield", font_size=24, color=RED),
-                MathTex(r"Y = \epsilon \cdot M \cdot 17 \text{ kt/kg}"),
-            ).arrange(DOWN, buff=0.2),
+        exc = anim_data.generate_excursion_data()
+
+        left_panel = Rectangle(width=5, height=5, color=WHITE, stroke_width=1)
+        left_panel.shift(LEFT * 3.5 + DOWN * 0.5)
+        right_panel = Rectangle(width=5, height=5, color=WHITE, stroke_width=1)
+        right_panel.shift(RIGHT * 3.5 + DOWN * 0.5)
+
+        self.play(Create(left_panel), Create(right_panel))
+
+        left_title = Text("Core Cross-Section", font_size=18).next_to(left_panel, UP)
+        right_title = Text("Time Evolution", font_size=18).next_to(right_panel, UP)
+        self.play(Write(left_title), Write(right_title))
+
+        core = Circle(radius=1.5, color=RED, fill_opacity=0.5)
+        core.move_to(left_panel.get_center())
+
+        inner_rings = VGroup()
+        for r_frac in [0.25, 0.5, 0.75]:
+            ring = Circle(
+                radius=1.5 * r_frac, color=WHITE, stroke_width=0.5, stroke_opacity=0.3
+            )
+            ring.move_to(core.get_center())
+            inner_rings.add(ring)
+
+        self.play(Create(core), Create(inner_rings))
+
+        t_us = exc.t * 1e6
+        graph_center = right_panel.get_center()
+
+        mini_axes = Axes(
+            x_range=[0, t_us[-1], t_us[-1] / 2],
+            y_range=[0, 1.2, 0.5],
+            x_length=4,
+            y_length=1.5,
+            axis_config={"include_tip": False, "tick_size": 0.05},
+        ).move_to(graph_center + UP * 1)
+
+        mini_axes2 = Axes(
+            x_range=[0, t_us[-1], t_us[-1] / 2],
+            y_range=[-0.5, 1.2, 0.5],
+            x_length=4,
+            y_length=1.5,
+            axis_config={"include_tip": False, "tick_size": 0.05},
+        ).move_to(graph_center + DOWN * 1)
+
+        label1 = Text("Yield (norm)", font_size=12).next_to(mini_axes, LEFT, buff=0.1)
+        label2 = Text("α (norm)", font_size=12).next_to(mini_axes2, LEFT, buff=0.1)
+
+        self.play(Create(mini_axes), Write(label1), Create(mini_axes2), Write(label2))
+
+        yield_norm = exc.yield_kt / exc.yield_kt.max()
+        alpha_norm = exc.alpha / exc.alpha.max()
+
+        time_tracker = ValueTracker(0)
+
+        def get_idx():
+            t_val = time_tracker.get_value()
+            return min(int(t_val / t_us[-1] * len(t_us)), len(t_us) - 1)
+
+        yield_curve = always_redraw(
+            lambda: mini_axes.plot_line_graph(
+                t_us[: get_idx() + 1],
+                yield_norm[: get_idx() + 1],
+                add_vertex_dots=False,
+                line_color=YELLOW,
+                stroke_width=2,
+            )
+            if get_idx() > 0
+            else VGroup()
         )
 
-        concepts.arrange_in_grid(rows=2, cols=3, buff=0.8)
-        concepts.next_to(title, DOWN, buff=0.5)
+        alpha_curve = always_redraw(
+            lambda: mini_axes2.plot_line_graph(
+                t_us[: get_idx() + 1],
+                alpha_norm[: get_idx() + 1],
+                add_vertex_dots=False,
+                line_color=GREEN,
+                stroke_width=2,
+            )
+            if get_idx() > 0
+            else VGroup()
+        )
 
-        for concept in concepts:
-            self.play(Write(concept), run_time=1)
+        self.add(yield_curve, alpha_curve)
+
+        def update_core(c):
+            idx = get_idx()
+            R_scale = exc.R[idx] / exc.R[0]
+            T_frac = exc.T[idx] / exc.T.max()
+            color = interpolate_color(RED, WHITE, T_frac)
+            new_r = min(1.5 * R_scale, 2.2)
+            c.become(
+                Circle(radius=new_r, color=color, fill_opacity=0.5).move_to(
+                    left_panel.get_center()
+                )
+            )
+
+        core.add_updater(update_core)
+
+        time_display = always_redraw(
+            lambda: Text(
+                f"t = {time_tracker.get_value():.2f} μs", font_size=16
+            ).to_edge(DOWN)
+        )
+        self.add(time_display)
+
+        self.play(
+            time_tracker.animate.set_value(t_us[-1]), run_time=8, rate_func=linear
+        )
+        core.remove_updater(update_core)
 
         self.wait(2)
 
-        # Final message
-        final = Text(
-            "Based on arXiv:1606.01670v1 (Aste 2016)", font_size=20, color=GRAY
-        ).to_edge(DOWN)
-        self.play(Write(final))
 
+class NarrativeSequence(Scene):
+    def construct(self):
+        title = Text("Nuclear Device Physics", font_size=44)
+        subtitle = Text("From Implosion to Detonation", font_size=28, color=GRAY)
+        VGroup(title, subtitle).arrange(DOWN).move_to(ORIGIN)
+
+        self.play(Write(title), Write(subtitle))
+        self.wait(1)
+        self.play(FadeOut(title), FadeOut(subtitle))
+
+        self.phase_implosion()
+        self.phase_criticality()
+        self.phase_excursion()
+        self.phase_disassembly()
+        self.final_summary()
+
+    def phase_implosion(self):
+        phase = Text("Phase 1: Implosion", font_size=36, color=BLUE).to_edge(UP)
+        self.play(Write(phase))
+
+        core = Circle(radius=2, color=CORE_COLOR, fill_opacity=0.6)
+        shell = Annulus(
+            inner_radius=2, outer_radius=2.8, color=HE_COLOR, fill_opacity=0.3
+        )
+
+        arrows = VGroup()
+        for angle in np.linspace(0, 2 * PI, 8, endpoint=False):
+            arr = Arrow(
+                start=3.5 * np.array([np.cos(angle), np.sin(angle), 0]),
+                end=2.5 * np.array([np.cos(angle), np.sin(angle), 0]),
+                color=YELLOW,
+                buff=0,
+            )
+            arrows.add(arr)
+
+        self.play(Create(core), Create(shell), Create(arrows))
+        self.play(core.animate.scale(0.6), shell.animate.scale(0.6), run_time=2)
+
+        comp_text = MathTex(r"\rho \rightarrow 2.5\rho_0").next_to(core, DOWN)
+        self.play(Write(comp_text))
+
+        self.wait(1)
+        self.play(FadeOut(VGroup(phase, core, shell, arrows, comp_text)))
+
+    def phase_criticality(self):
+        phase = Text("Phase 2: Criticality", font_size=36, color=YELLOW).to_edge(UP)
+        self.play(Write(phase))
+
+        core = Circle(radius=1.2, color=YELLOW, fill_opacity=0.6)
+        self.play(Create(core))
+
+        k_text = MathTex(r"k_{eff} = 1.0 \rightarrow \text{CRITICAL}").next_to(
+            core, DOWN
+        )
+        self.play(Write(k_text))
+
+        neutrons = VGroup()
+        for _ in range(5):
+            n = Dot(color=WHITE, radius=0.05)
+            n.move_to(
+                core.get_center() + 0.3 * np.random.randn(3) * np.array([1, 1, 0])
+            )
+            neutrons.add(n)
+
+        self.play(FadeIn(neutrons))
+
+        for _ in range(3):
+            new_neutrons = VGroup()
+            for n in neutrons[:10]:
+                for _ in range(2):
+                    new_n = Dot(color=WHITE, radius=0.05)
+                    offset = 0.4 * np.random.randn(3) * np.array([1, 1, 0])
+                    new_n.move_to(n.get_center() + offset)
+                    if np.linalg.norm(new_n.get_center()) < 1.5:
+                        new_neutrons.add(new_n)
+            self.play(FadeOut(neutrons), FadeIn(new_neutrons), run_time=0.5)
+            neutrons = new_neutrons
+
+        supercrit = MathTex(r"k_{eff} > 1 \rightarrow \text{SUPERCRITICAL}", color=RED)
+        supercrit.next_to(k_text, DOWN)
+        self.play(Write(supercrit), core.animate.set_color(RED))
+
+        self.wait(1)
+        self.play(FadeOut(VGroup(phase, core, k_text, supercrit, neutrons)))
+
+    def phase_excursion(self):
+        phase = Text(
+            "Phase 3: Supercritical Excursion", font_size=36, color=RED
+        ).to_edge(UP)
+        self.play(Write(phase))
+
+        core = Circle(radius=1.2, color=RED, fill_opacity=0.6)
+        self.play(Create(core))
+
+        equations = (
+            VGroup(
+                MathTex(r"N(t) = N_0 e^{\alpha t}"),
+                MathTex(r"\alpha \sim 10^8 \text{ s}^{-1}"),
+                MathTex(r"\tau_{generation} \sim 10 \text{ ns}"),
+            )
+            .arrange(DOWN)
+            .scale(0.8)
+            .to_edge(RIGHT)
+        )
+
+        self.play(Write(equations))
+
+        for i in range(5):
+            color = interpolate_color(RED, WHITE, i / 5)
+            self.play(core.animate.scale(1.1).set_color(color), run_time=0.3)
+
+        energy = MathTex(r"E \sim 10^{13} \text{ J} \sim 15 \text{ kt TNT}")
+        energy.next_to(core, DOWN)
+        self.play(Write(energy), Flash(core, color=WHITE))
+
+        self.wait(1)
+        self.play(FadeOut(VGroup(phase, core, equations, energy)))
+
+    def phase_disassembly(self):
+        phase = Text("Phase 4: Disassembly", font_size=36, color=BLUE).to_edge(UP)
+        self.play(Write(phase))
+
+        core = Circle(radius=1.5, color=WHITE, fill_opacity=0.4)
+        self.play(Create(core))
+
+        text = (
+            VGroup(
+                Text("Radiation pressure:", font_size=20),
+                MathTex(r"P \sim 10^{14} \text{ Pa (Gbar)}"),
+                Text("Expansion terminates chain", font_size=20),
+            )
+            .arrange(DOWN)
+            .to_edge(RIGHT)
+        )
+
+        self.play(Write(text))
+        self.play(core.animate.scale(2.5).set_opacity(0.1), run_time=2)
+
+        subcrit = Text("α < 0 : Subcritical", color=BLUE).next_to(core, DOWN)
+        self.play(Write(subcrit))
+
+        self.wait(1)
+        self.play(FadeOut(VGroup(phase, core, text, subcrit)))
+
+    def final_summary(self):
+        summary = VGroup(
+            Text("Summary", font_size=40),
+            Text(""),
+            Text("• Implosion: ~10 μs", font_size=24),
+            Text("• Criticality → Supercritical", font_size=24),
+            Text("• Excursion: ~1 μs", font_size=24),
+            Text("• Peak: ~10¹³ J in ~100 ns", font_size=24),
+            Text("• Disassembly terminates reaction", font_size=24),
+        ).arrange(DOWN, aligned_edge=LEFT)
+
+        self.play(Write(summary), run_time=3)
         self.wait(3)
 
 
-# =============================================================================
-# Main entry point
-# =============================================================================
-
 if __name__ == "__main__":
-    print("Run with: uv run manim -pql animations.py <SceneName>")
+    print("Nuclear Physics Animation Suite")
+    print("=" * 50)
+    print("\nRun with: uv run manim -pql animations.py <SceneName>")
     print("\nAvailable scenes:")
-    print("  CriticalMassScene        - Neutron multiplication concept")
-    print("  NeutronFluxScene         - 2D flux distribution")
-    print("  SupercriticalExcursionScene - Time evolution of excursion")
-    print("  CompressionScene         - Effect of compression on M_c")
-    print("  FizzleScene              - Predetonation probability")
-    print("  GeometryComparisonScene  - Shape effects on criticality")
-    print("  NuclearPhysicsOverview   - Complete concept summary")
+    print("  ImplosionSequence      - Mass shell compression")
+    print("  FVMGridVisualization   - Finite volume mesh & flux")
+    print("  FluxEvolutionScene     - 2D neutron flux heatmap")
+    print("  SupercriticalExcursion - Full excursion with graphs")
+    print("  DisassemblyScene       - Hydrodynamic expansion")
+    print("  CompositeOverlay       - Multi-view simultaneous")
+    print("  NarrativeSequence      - Complete physics story")

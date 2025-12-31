@@ -33,7 +33,18 @@ class Mesh2D:
         return i * self.nz + j
 
     def is_boundary(self, i: int, j: int) -> bool:
-        return i == 0 or i == self.nr - 1 or j == 0 or j == self.nz - 1
+        """
+        Check if node is on a physical boundary.
+
+        Note: r=0 (i=0) is NOT a boundary - it's the axis of symmetry.
+        The flux is finite (typically maximum) at r=0, with ∂Φ/∂r = 0.
+        Only the outer radial boundary and axial ends are true boundaries.
+        """
+        return i == self.nr - 1 or j == 0 or j == self.nz - 1
+
+    def is_axis(self, i: int) -> bool:
+        """Check if node is on the axis of symmetry (r=0)."""
+        return i == 0
 
 
 @dataclass
@@ -95,22 +106,24 @@ def compute_k_effective(
             Sigma_a_local = mat.Sigma_a[i, j]
             Sigma_f_local = mat.Sigma_f[i, j]
 
-            # ∂²Φ/∂r² + (1/r)∂Φ/∂r  (axisymmetric Laplacian)
-            if r > 1e-10:
+            # Axisymmetric Laplacian: ∂²Φ/∂r² + (1/r)∂Φ/∂r
+            # At r=0: use L'Hôpital with symmetry BC (Φ_{-1} = Φ_{+1})
+            if mesh.is_axis(i):
+                # ∇²Φ = 4(Φ_{i+1} - Φ_i)/dr² at r=0 with symmetry
+                coeff_r_plus = 4 * D_local / dr**2
+                coeff_r_minus = 0.0  # No i-1 coupling at axis
+                coeff_r_center = -4 * D_local / dr**2
+            else:
                 coeff_r_plus = D_local / dr**2 + D_local / (2 * r * dr)
                 coeff_r_minus = D_local / dr**2 - D_local / (2 * r * dr)
                 coeff_r_center = -2 * D_local / dr**2
-            else:
-                # r=0 singularity: L'Hopital gives (1/r)∂Φ/∂r → ∂²Φ/∂r²
-                coeff_r_plus = 2 * D_local / dr**2
-                coeff_r_minus = 2 * D_local / dr**2
-                coeff_r_center = -4 * D_local / dr**2
 
             coeff_z = D_local / dz**2
 
-            # L = -D∇² + Σa
+            # L = -D∇² + Σa (loss operator)
             L[idx, mesh.node_index(i + 1, j)] = -coeff_r_plus
-            L[idx, mesh.node_index(i - 1, j)] = -coeff_r_minus
+            if not mesh.is_axis(i):
+                L[idx, mesh.node_index(i - 1, j)] = -coeff_r_minus
             L[idx, mesh.node_index(i, j + 1)] = -coeff_z
             L[idx, mesh.node_index(i, j - 1)] = -coeff_z
             L[idx, idx] = -coeff_r_center + 2 * coeff_z + Sigma_a_local
@@ -174,27 +187,30 @@ def compute_alpha_2d(mesh: Mesh2D, mat: Material2D) -> Tuple[float, np.ndarray]:
             r = mesh.r[i]
 
             if mesh.is_boundary(i, j):
-                A[idx, idx] = -1e10
+                # Boundary: force eigenfunction to zero via large negative diagonal
+                A[idx, idx] = -v * 1e6 * mat.Sigma_a.max()
                 continue
 
             D_local = mat.D[i, j]
             Sigma_a_local = mat.Sigma_a[i, j]
             Sigma_f_local = mat.Sigma_f[i, j]
 
-            if r > 1e-10:
+            # Axisymmetric Laplacian with proper r=0 handling
+            if mesh.is_axis(i):
+                coeff_r_plus = 4 * D_local / dr**2
+                coeff_r_minus = 0.0
+                coeff_r_center = -4 * D_local / dr**2
+            else:
                 coeff_r_plus = D_local / dr**2 + D_local / (2 * r * dr)
                 coeff_r_minus = D_local / dr**2 - D_local / (2 * r * dr)
                 coeff_r_center = -2 * D_local / dr**2
-            else:
-                coeff_r_plus = 2 * D_local / dr**2
-                coeff_r_minus = 2 * D_local / dr**2
-                coeff_r_center = -4 * D_local / dr**2
 
             coeff_z = D_local / dz**2
 
-            # A = v*(D∇² + νΣf - Σa)
+            # A = v*(D∇² + νΣf - Σa): gain - loss operator
             A[idx, mesh.node_index(i + 1, j)] = v * coeff_r_plus
-            A[idx, mesh.node_index(i - 1, j)] = v * coeff_r_minus
+            if not mesh.is_axis(i):
+                A[idx, mesh.node_index(i - 1, j)] = v * coeff_r_minus
             A[idx, mesh.node_index(i, j + 1)] = v * coeff_z
             A[idx, mesh.node_index(i, j - 1)] = v * coeff_z
             A[idx, idx] = v * (

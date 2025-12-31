@@ -39,7 +39,11 @@ class Mesh2D:
         return i * self.nz + j
 
     def is_boundary(self, i: int, j: int) -> bool:
-        return i == 0 or i == self.nr - 1 or j == 0 or j == self.nz - 1
+        """Physical boundaries only - r=0 is symmetry axis, not boundary."""
+        return i == self.nr - 1 or j == 0 or j == self.nz - 1
+
+    def is_axis(self, i: int) -> bool:
+        return i == 0
 
 
 @dataclass
@@ -78,20 +82,22 @@ def build_diffusion_operator(
             Sigma_a_local = mat.Sigma_a[i, j]
             Sigma_f_local = mat.Sigma_f[i, j]
 
-            if r > 1e-10:
+            # Axisymmetric Laplacian: ∂²Φ/∂r² + (1/r)∂Φ/∂r
+            if mesh.is_axis(i):
+                coeff_r_plus = 4 * D_local / dr**2
+                coeff_r_minus = 0.0
+                coeff_r_center = -4 * D_local / dr**2
+            else:
                 coeff_r_plus = D_local / dr**2 + D_local / (2 * r * dr)
                 coeff_r_minus = D_local / dr**2 - D_local / (2 * r * dr)
                 coeff_r_center = -2 * D_local / dr**2
-            else:
-                coeff_r_plus = 2 * D_local / dr**2
-                coeff_r_minus = 2 * D_local / dr**2
-                coeff_r_center = -4 * D_local / dr**2
 
             coeff_z = D_local / dz**2
 
             # L = -D∇² + Σa
             L[idx, mesh.node_index(i + 1, j)] = -coeff_r_plus
-            L[idx, mesh.node_index(i - 1, j)] = -coeff_r_minus
+            if not mesh.is_axis(i):
+                L[idx, mesh.node_index(i - 1, j)] = -coeff_r_minus
             L[idx, mesh.node_index(i, j + 1)] = -coeff_z
             L[idx, mesh.node_index(i, j - 1)] = -coeff_z
             L[idx, idx] = -coeff_r_center + 2 * coeff_z + Sigma_a_local

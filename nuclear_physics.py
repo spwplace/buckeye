@@ -231,23 +231,54 @@ def compute_diffusion_params(
     )
 
 
+class PhysicsConfig:
+    """
+    Configuration for physics calculations.
+
+    Allows switching between standard physics constants and
+    calibrated values that match experimental data (e.g., Trinity test).
+    """
+
+    # Standard Milne problem value
+    EXTRAPOLATION_FACTOR_STANDARD = 0.7104
+
+    # Calibrated to match Trinity yield (Aste 2016, Section 3.1)
+    EXTRAPOLATION_FACTOR_TRINITY = 0.633
+
+    # Active value (default: standard physics)
+    extrapolation_factor = EXTRAPOLATION_FACTOR_STANDARD
+
+    # Use Mark approximation for absorbing media
+    use_mark_approximation = True
+
+    @classmethod
+    def use_standard_physics(cls):
+        cls.extrapolation_factor = cls.EXTRAPOLATION_FACTOR_STANDARD
+        cls.use_mark_approximation = True
+
+    @classmethod
+    def use_trinity_calibration(cls):
+        """Calibrated to reproduce Trinity test yield (~15-21 kt)."""
+        cls.extrapolation_factor = cls.EXTRAPOLATION_FACTOR_TRINITY
+        cls.use_mark_approximation = False  # Use simple factor
+
+
 def extrapolation_distance(lambda_tr: float, c: float) -> float:
     """
-    Compute extrapolation distance for vacuum boundary using transport theory.
+    Compute extrapolation distance for vacuum boundary.
 
-    For pure scattering (c=1): delta = 0.7104 * lambda_tr (Milne problem)
-    For absorbing media: uses Mark approximation from Case & Zweifel.
-
-    Mark approximation: delta/lambda_tr = 0.7104 * sqrt(3c / (1 + 5c/3))
-    Valid for c > 0.3 (typical fast reactor spectra).
+    Uses PhysicsConfig to select between standard Mark approximation
+    and Trinity-calibrated values.
     """
-    if c > 0.9999:
-        return 0.7104 * lambda_tr
+    base_factor = PhysicsConfig.extrapolation_factor
 
-    # Mark approximation for absorbing media (Case & Zweifel, Linear Transport Theory)
-    # delta = 0.7104 * lambda_tr * sqrt(3c / (1 + 5c/3))
+    if not PhysicsConfig.use_mark_approximation or c > 0.9999:
+        return base_factor * lambda_tr
+
+    # Mark approximation for absorbing media (Case & Zweifel)
+    # δ/λ_tr = factor × √(3c / (1 + 5c/3))
     mark_factor = np.sqrt(3.0 * c / (1.0 + 5.0 * c / 3.0))
-    return 0.7104 * lambda_tr * mark_factor
+    return base_factor * lambda_tr * mark_factor
 
 
 def compute_critical_radius(

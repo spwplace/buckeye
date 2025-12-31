@@ -1,0 +1,33 @@
+[book]
+authors = ["Nuclear Football Project"]
+language = "en"
+src = "src"
+title = "The Nuclear Football: A Deep Dive into Monte Carlo Criticality Analysis"
+
+[build]
+build-dir = "book"
+create-missing = true
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/your-repo/nuclear-football"
+additional-css = []
+additional-js = []
+no-section-label = false
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.playground]
+editable = false
+copyable = true
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+
+[rust]
+edition = "2021"

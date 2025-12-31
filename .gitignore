@@ -15,3 +15,4 @@ wheels/
 *.png
 *.mp4
 media/
+/book/book
